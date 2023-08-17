@@ -1,0 +1,10 @@
+{
+  "type": "module",
+  "dependencies": {
+    "@types/inquirer": "^9.0.3"
+    
+  },
+  "devDependencies": {
+    "inquirer": "^9.2.10"
+  }
+}
