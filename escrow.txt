@@ -1,0 +1,126 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
+pragma experimental ABIEncoderV2;
+
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract EscrowContract is Ownable(msg.sender) {
+    enum DealState {
+        BOOKED,
+        DELIVERED,
+        COMPLETE,
+        DISPUTED,
+        CANCELLED
+    }
+    struct Item {
+        uint256 amount;
+        uint256 id;
+        address serviceProvider;
+        address user;
+        bool exists;
+        DealState state;
+        string coordinates;
+    } //item published for sale in escrow arragement
+
+    mapping(uint256 => Item) public items;
+    uint256 totalItems = 0;
+
+    function createOrder(
+        uint256 _id,
+        address _serviceProvider,
+        string memory _coordinates
+    ) public payable {
+        require(msg.value > 0, "Amount must be greater than 0");
+        require(_id > 0, "Id must be greater than 0");
+        require(
+            _serviceProvider != address(0),
+            "Service provider address must be valid"
+        );
+        require(!items[_id].exists, "Item already exists");
+        Item memory item = Item({
+            amount: msg.value,
+            id: _id,
+            serviceProvider: _serviceProvider,
+            user: msg.sender,
+            exists: true,
+            coordinates: _coordinates,
+            state: DealState.BOOKED
+        });
+
+        items[_id] = item;
+        totalItems++;
+    }
+
+    function cancelOrder(uint256 _id) public {
+        require(items[_id].exists, "Item does not exist");
+        require(items[_id].user == msg.sender, "Only user can cancel order");
+        require(
+            items[_id].state == DealState.BOOKED,
+            "Order is not in booked state"
+        );
+        items[_id].state = DealState.CANCELLED;
+        payable(items[_id].user).transfer(items[_id].amount);
+    }
+
+    function deliverOrder(uint256 _id) public {
+        require(items[_id].exists, "Item does not exist");
+        require(
+            items[_id].serviceProvider == msg.sender,
+            "Only service provider can accept order"
+        );
+        require(
+            items[_id].state == DealState.BOOKED,
+            "Order is not in booked state"
+        );
+        items[_id].state = DealState.DELIVERED;
+    }
+
+    function completeOrder(uint256 _id) public {
+        require(items[_id].exists, "Item does not exist");
+        require(items[_id].user == msg.sender, "Only user can release escrow");
+        require(
+            items[_id].state == DealState.DELIVERED,
+            "Order is not in delivered state"
+        );
+        items[_id].state = DealState.COMPLETE;
+        payable(items[_id].serviceProvider).transfer(items[_id].amount);
+    }
+
+    function disputeOrder(uint256 _id) public {
+        require(items[_id].exists, "Item does not exist");
+        require(items[_id].user == msg.sender, "Only user can dispute order");
+        require(
+            items[_id].state == DealState.DELIVERED,
+            "Order is not in delivered state"
+        );
+        items[_id].state = DealState.DISPUTED;
+    }
+    function releaseEscrow(uint256 _id, bool isUser) public onlyOwner {
+        require(items[_id].exists, "Item does not exist");
+        // check if order is in complete state or disputed state
+        require(
+                items[_id].state == DealState.DISPUTED,
+            "Order is not in disputed state"
+        );
+        if (!isUser) {
+            payable(items[_id].serviceProvider).transfer(items[_id].amount);
+        } else {
+            payable(items[_id].user).transfer(items[_id].amount);
+        }
+    }
+    function getOrderHistory(address _user) public view returns (Item[] memory) {
+        Item[] memory userOrders = new Item[](totalItems);
+        uint256 counter = 0;
+        for (uint256 i = 0; i < totalItems; i++) {
+            if (items[i].user == _user) {
+                userOrders[counter] = items[i];
+                counter++;
+            }
+        }
+        return userOrders;
+    }
+    function getOrder(uint256 _id) public view returns (Item memory) {
+        return items[_id];
+    }
+}
